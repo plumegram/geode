@@ -33,7 +33,9 @@ struct CustomMenuLayer : Modify<CustomMenuLayer, MenuLayer> {
         if (!self.setHookPriority("MenuLayer::init", geode::node_ids::GEODE_ID_PRIORITY)) {
             log::warn("Failed to set MenuLayer::init hook priority, node IDs may not work properly");
         }
-        GEODE_FORWARD_COMPAT_DISABLE_HOOKS_INNER("MenuLayer stuff disabled")
+        // The Geode button / mod menu is the only way to reach the mod browser, so the
+        // MenuLayer hooks are kept enabled even in forward compatibility mode.
+        // GEODE_FORWARD_COMPAT_DISABLE_HOOKS_INNER("MenuLayer stuff disabled")
     }
 
     struct Fields {

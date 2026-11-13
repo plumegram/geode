@@ -1240,7 +1240,7 @@ bool ModPopup::availableForInstall() const {
         auto& version = serverSource->latestVersion();
         auto gameVersion = version.getGameVersion();
 
-        return (!gameVersion || gameVersion == "*" || gameVersion == GEODE_STR(GEODE_GD_VERSION)) &&
+        return ModMetadata::isGameVersionCompatible(gameVersion) &&
             Loader::get()->isModVersionSupported(version.getGeodeVersion());
     }
     return false;

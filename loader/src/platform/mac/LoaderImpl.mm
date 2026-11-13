@@ -302,6 +302,12 @@ std::string Loader::Impl::getLaunchCommand() const {
 }
 
 bool Loader::Impl::isModVersionSupported(VersionInfo const& target) {
+    // Legacy mod compatibility: the index has no mods built for Geode 6 yet, so mods
+    // built for an older major version are still allowed to load. The loader keeps
+    // most of the Geode 5 exports, so such mods usually work fine.
+    if (this->getVersion().getMajor() > target.getMajor()) {
+        return true;
+    }
     return semverCompare(this->getVersion(), target);
 }
 

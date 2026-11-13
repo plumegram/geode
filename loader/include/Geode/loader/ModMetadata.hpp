@@ -252,6 +252,12 @@ namespace geode {
         */
         Result<> checkGameVersion() const;
         /**
+         * Checks if a mod built for the given GD version can run on the currently
+         * running Geometry Dash. Mods built for an older GD version are considered
+         * compatible (legacy mod support).
+         */
+        static bool isGameVersionCompatible(std::optional<std::string> const& gdVersion);
+        /**
          * Checks if mod can be installed on the current Geode version.
          * Returns Ok() if it can, Err explaining why not otherwise.
         */

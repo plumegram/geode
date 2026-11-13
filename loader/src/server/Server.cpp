@@ -675,6 +675,17 @@ std::string server::getServerAPIBaseURL() {
     return "https://api.geode-sdk.org/v1";
 }
 
+// Legacy index compatibility.
+//
+// The official index only lists mods for the exact GD and Geode versions they were
+// built for, and it has no entries for Geode 6 / GD 2.2091 yet - querying it with the
+// versions this loader reports returns an empty catalog. To keep the whole catalog
+// visible the index is queried with the newest legacy pair instead (GD 2.2081 /
+// Geode 5.11.2), and mods built for those versions are accepted at load time (see
+// ModMetadata::isGameVersionCompatible and Loader::Impl::isModVersionSupported).
+constexpr auto LEGACY_INDEX_GD_VERSION = "2.2081";
+constexpr auto LEGACY_INDEX_GEODE_VERSION = "5.11.2";
+
 template <class... Args>
 std::string formatServerURL(fmt::format_string<Args...> fmt, Args&&... args) {
     return getServerAPIBaseURL() + fmt::format(fmt, std::forward<Args>(args)...);
@@ -708,8 +719,8 @@ ServerFuture<ServerModsList> server::getMods(ModsQuery query, bool useCache) {
         req.param("query", *query.query);
     }
 
-    req.param("gd", GEODE_GD_VERSION_STR);
-    req.param("geode", Loader::get()->getVersion().toNonVString());
+    req.param("gd", LEGACY_INDEX_GD_VERSION);
+    req.param("geode", LEGACY_INDEX_GEODE_VERSION);
     if (Loader::get()->isPatchless())
         req.param("jitless", "true");
 
@@ -828,7 +839,7 @@ ServerFuture<ServerModVersion> server::getModVersion(std::string id, ModVersion 
             "/mods/{}/versions/{}?gd={}&platforms={}",
             id,
             versionURL,
-            Loader::get()->getGameVersion(),
+            LEGACY_INDEX_GD_VERSION,
             GEODE_PLATFORM_SHORT_IDENTIFIER
     ));
 
@@ -910,8 +921,8 @@ ServerFuture<ServerModUpdateAllCheck> server::batchedCheckUpdates(std::vector<st
     auto req = web::WebRequest();
     req.userAgent(getServerUserAgent());
     req.param("platform", GEODE_PLATFORM_SHORT_IDENTIFIER);
-    req.param("gd", GEODE_GD_VERSION_STR);
-    req.param("geode", Loader::get()->getVersion().toNonVString());
+    req.param("gd", LEGACY_INDEX_GD_VERSION);
+    req.param("geode", LEGACY_INDEX_GEODE_VERSION);
     if (Loader::get()->isPatchless())
         req.param("jitless", "true");
 
@@ -1023,7 +1034,7 @@ ServerFuture<ServerLoaderVersion> server::getLatestLoaderVersion(bool useCache) 
     req.userAgent(getServerUserAgent());
     auto response = co_await req.get(
         formatServerURL("/loader/versions/latest?gd={}&platform={}",
-            Loader::get()->getGameVersion(),
+            LEGACY_INDEX_GD_VERSION,
             GEODE_PLATFORM_SHORT_IDENTIFIER_NOARCH
         )
     );

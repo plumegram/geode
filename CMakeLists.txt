@@ -222,6 +222,9 @@ include(cmake/AIAgentDetection.cmake)
 # there is now a script that runs over these lines to determine the gd version
 # so please update them when you set the game version
 
+# This fork is pinned to Geometry Dash 2.2091 (build via .github/workflows/build.yml).
+# Mods built against this SDK also target 2.2091 unless they override GEODE_GD_VERSION.
+
 # begin GEODE_GD_VERSION
 # win:     2.2091
 # mac:     2.2091

@@ -1,0 +1,262 @@
+name: Build Geode (GD 2.2091)
+
+# Сборка Geode под Geometry Dash 2.2091.
+#  - push в main / ручной запуск -> бинарники + GitHub Release
+#  - pull_request                -> только сборка, без релиза
+#
+# Ручной запуск: Actions -> "Build Geode (GD 2.2091)" -> Run workflow.
+# platforms: all | win, android32, android64, ios, macm1, macintel
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Платформы: all или список через запятую (win, android32, android64, ios, macm1, macintel)'
+        required: false
+        default: all
+      release:
+        description: 'Опубликовать GitHub Release с артефактами'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GEODE_GD_VERSION: '2.2091'
+  GEODE_COMP_GD_VERSION: '22091'
+
+jobs:
+  prepare:
+    name: Prepare matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      version: ${{ steps.matrix.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build platform matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version=$(xargs < VERSION)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          declare -A targets=(
+            [win]=export-win
+            [android32]=export-android32
+            [android64]=export-android64
+            [ios]=export-ios
+            [macm1]=export-macm1
+            [macintel]=export-macintel
+          )
+          order="win android32 android64 ios macm1 macintel"
+
+          sel="${{ inputs.platforms }}"
+          if [ -z "${sel// /}" ] || [ "$sel" = "all" ]; then
+            sel="$order"
+          fi
+
+          json='{"include":['
+          sep=''
+          for p in ${sel//,/ }; do
+            if [ -z "${targets[$p]:-}" ]; then
+              echo "::error::Неизвестная платформа '$p'. Допустимо: all, $order"
+              exit 1
+            fi
+            json+="${sep}{\"platform\":\"$p\",\"target\":\"${targets[$p]}\"}"
+            sep=','
+          done
+          json+=']}'
+
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+          echo "Платформы: $sel"
+          echo "$json"
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: [prepare]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify GD ${{ env.GEODE_GD_VERSION }} target
+        run: |
+          set -euo pipefail
+          grep -n "GEODE_GD_VERSION 2.2091" CMakeLists.txt
+          grep -n "GEODE_COMP_GD_VERSION 22091" CMakeLists.txt
+          echo "OK: цель сборки — Geometry Dash $GEODE_GD_VERSION"
+
+      - name: Extract commit hash
+        id: commit
+        run: echo "hash=$(git describe --always --dirty)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.platform }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: ${{ matrix.target }}
+          outputs: type=local,dest=./out/${{ matrix.platform }}
+          cache-from: type=gha,scope=geode-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=geode-${{ matrix.platform }}
+          build-contexts: |
+            bindings=https://github.com/geode-sdk/bindings.git#main
+          # сохраняем .git биндингов, чтобы лоадер вшил их commit hash
+          build-args: |
+            BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
+            GEODE_COMMIT_HASH=${{ steps.commit.outputs.hash }}
+          provenance: false
+
+      - name: Verify expected output
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la "out/${{ matrix.platform }}"
+          case "${{ matrix.platform }}" in
+            android32) test -f out/android32/Geode.android32.so ;;
+            android64) test -f out/android64/Geode.android64.so ;;
+            ios)       test -f out/ios/Geode.ios.dylib ;;
+            macm1)     test -f out/macm1/Geode.dylib; test -f out/macm1/GeodeBootstrapper.dylib; test -f out/macm1/libfmod.dylib ;;
+            macintel)  test -f out/macintel/Geode.dylib; test -f out/macintel/GeodeBootstrapper.dylib; test -f out/macintel/libfmod.dylib ;;
+            win)       test -f out/win/Geode.dll; test -f out/win/GeodeUpdater.exe ;;
+          esac
+          echo "OK: артефакты на месте"
+
+      - name: Build Windows installer (NSIS)
+        if: matrix.platform == 'win'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nsis
+          # installer.nsi берёт файлы из bin/nightly в корне репозитория
+          mkdir -p bin/nightly
+          cp -a out/win/. bin/nightly/
+          makensis -WX -V3 ./installer/windows/installer.nsi
+          ls -la installer/windows/
+
+      - name: Upload ${{ matrix.platform }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: geode-${{ matrix.platform }}
+          path: out/${{ matrix.platform }}/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows installer
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: geode-installer-win
+          path: installer/windows/geode-installer-win.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.release) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: geode-*
+
+      - name: Pack archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.prepare.outputs.version }}"
+          mkdir -p dist
+
+          pack() { # <artifact-dir> <zip-name> <files...>
+            local dir="artifacts/$1"; shift
+            local zip="$1"; shift
+            local files=()
+            for f in "$@"; do
+              [ -f "$dir/$f" ] && files+=("$f")
+            done
+            if [ ${#files[@]} -eq 0 ]; then
+              echo "skip $zip (нет файлов)"
+              return 0
+            fi
+            ( cd "$dir" && zip -j "../../dist/$zip" "${files[@]}" )
+          }
+
+          pack geode-win       "geode-$VERSION-gd$GEODE_GD_VERSION-win.zip"       Geode.dll Geode.lib Geode.pdb XInput1_4.dll GeodeUpdater.exe
+          pack geode-android32 "geode-$VERSION-gd$GEODE_GD_VERSION-android32.zip" Geode.android32.so
+          pack geode-android64 "geode-$VERSION-gd$GEODE_GD_VERSION-android64.zip" Geode.android64.so
+          pack geode-ios       "geode-$VERSION-gd$GEODE_GD_VERSION-ios.zip"       Geode.ios.dylib
+          pack geode-macm1     "geode-$VERSION-gd$GEODE_GD_VERSION-macm1.zip"     Geode.dylib GeodeBootstrapper.dylib libfmod.dylib
+          pack geode-macintel  "geode-$VERSION-gd$GEODE_GD_VERSION-macintel.zip"  Geode.dylib GeodeBootstrapper.dylib libfmod.dylib
+
+          if [ -f artifacts/geode-installer-win/geode-installer-win.exe ]; then
+            cp artifacts/geode-installer-win/geode-installer-win.exe \
+               "dist/geode-installer-$VERSION-gd$GEODE_GD_VERSION-win.exe"
+          fi
+
+          # ресурсы лоадера — нужны при ручной установке (Windows/Android)
+          if [ -d artifacts/geode-android64/resources ]; then
+            ( cd artifacts/geode-android64 && zip -qr "../../dist/geode-$VERSION-gd$GEODE_GD_VERSION-resources.zip" resources )
+          fi
+
+          ls -la dist
+
+      - name: Create / update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.prepare.outputs.version }}"
+          TAG="gd-$GEODE_GD_VERSION"
+
+          if ! ls dist/* >/dev/null 2>&1; then
+            echo "Артефактов нет — релиз не создаём"
+            exit 0
+          fi
+
+          cat > notes.md <<EOF
+          Geode **$VERSION**, сборка под **Geometry Dash $GEODE_GD_VERSION** (коммит \`${{ github.sha }}\`).
+
+          | Платформа | Файлы |
+          | --- | --- |
+          | Windows | \`Geode.dll\`, \`XInput1_4.dll\`, \`GeodeUpdater.exe\`, \`Geode.lib\`, \`Geode.pdb\` + установщик |
+          | Android 32/64 | \`Geode.android32.so\` / \`Geode.android64.so\` |
+          | iOS | \`Geode.ios.dylib\` |
+          | macOS arm64 / x86_64 | \`Geode.dylib\`, \`GeodeBootstrapper.dylib\`, \`libfmod.dylib\` |
+
+          Установка на Windows: запустить \`geode-installer-...-win.exe\` либо вручную скопировать \`Geode.dll\`, \`XInput1_4.dll\`, \`GeodeUpdater.exe\` в папку Geometry Dash.
+          EOF
+
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "Geode for GD $GEODE_GD_VERSION" --notes-file notes.md
+          gh release edit "$TAG" --notes-file notes.md
+          gh release upload "$TAG" dist/* --clobber

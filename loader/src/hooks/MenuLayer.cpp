@@ -99,6 +99,10 @@ struct CustomMenuLayer : Modify<CustomMenuLayer, MenuLayer> {
             }
 
             auto bottomMenu = static_cast<CCMenu*>(this->getChildByID("bottom-menu"));
+            if (!bottomMenu) {
+                log::warn("MenuLayer: no 'bottom-menu' node, skipping the Geode button");
+                return true;
+            }
 
             auto btn = CCMenuItemSpriteExtra::create(
                 m_fields->m_geodeButton, this,
@@ -114,9 +118,9 @@ struct CustomMenuLayer : Modify<CustomMenuLayer, MenuLayer> {
 
             //this code doesnt run have fun figuring out why idc enough
             if (auto node = this->getChildByID("settings-gamepad-icon")) {
-                node->setPositionX(
-                    bottomMenu->getChildByID("settings-button")->getPositionX() + winSize.width / 2
-                );
+                if (auto settingsBtn = bottomMenu->getChildByID("settings-button")) {
+                    node->setPositionX(settingsBtn->getPositionX() + winSize.width / 2);
+                }
             }
         }
 
@@ -125,7 +129,7 @@ struct CustomMenuLayer : Modify<CustomMenuLayer, MenuLayer> {
 			if (auto bottomMenu = this->getChildByID("bottom-menu")) {
 				auto geodeBtn = bottomMenu->getChildByID("geode-button"_spr);
 
-				if (auto downloadModsHereSpr = CCSprite::createWithSpriteFrameName("download-mods-here.png"_spr)) {
+				if (geodeBtn) if (auto downloadModsHereSpr = CCSprite::createWithSpriteFrameName("download-mods-here.png"_spr)) {
 					downloadModsHereSpr->setID("download-mods-here"_spr);
 					downloadModsHereSpr->setPosition(this->convertToNodeSpace(geodeBtn->convertToWorldSpace(CCPointZero) + CCPoint(75.f, 55.f)));
 					downloadModsHereSpr->setScale(0.8f);
@@ -346,40 +350,53 @@ struct CustomMenuLayer : Modify<CustomMenuLayer, MenuLayer> {
     void fixSocialMenu() {
         // I did NOT have fun doing this
         auto socialMenu = static_cast<CCMenu*>(this->getChildByID("social-media-menu"));
+        if (!socialMenu) {
+            log::warn("MenuLayer: no 'social-media-menu' node, skipping layout fix");
+            return;
+        }
         socialMenu->ignoreAnchorPointForPosition(false);
         socialMenu->setAnchorPoint({0.0f, 0.0f});
         socialMenu->setPosition({10.f, 13.75f});
 
         auto robtopButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("robtop-logo-button"));
+        if (!robtopButton) {
+            log::warn("MenuLayer: no 'robtop-logo-button' node, skipping layout fix");
+            return;
+        }
         robtopButton->setPosition(robtopButton->getScaledContentSize() / 2);
 
         float horizontalGap = 3.6f;
         float verticalGap = 6.25f;
         auto facebookButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("facebook-button"));
+        auto twitterButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("twitter-button"));
+        auto youtubeButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("youtube-button"));
+        auto twitchButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("twitch-button"));
+        auto discordButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("discord-button"));
+        if (!facebookButton || !twitterButton || !youtubeButton || !twitchButton || !discordButton) {
+            log::warn("MenuLayer: social buttons missing, skipping layout fix");
+            return;
+        }
+
         facebookButton->setPosition({
             (facebookButton->getScaledContentSize().width / 2) - 0.6f,
             robtopButton->getScaledContentSize().height + verticalGap + facebookButton->getScaledContentSize().height / 2
         });
 
-        auto twitterButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("twitter-button"));
         twitterButton->setPosition({
             facebookButton->getPositionX() + facebookButton->getScaledContentSize().width / 2 + horizontalGap + twitterButton->getScaledContentSize().width / 2,
             robtopButton->getScaledContentSize().height + verticalGap + facebookButton->getScaledContentSize().height / 2
         });
 
-        auto youtubeButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("youtube-button"));
         youtubeButton->setPosition({
             twitterButton->getPositionX() + twitterButton->getScaledContentSize().width / 2 + horizontalGap + youtubeButton->getScaledContentSize().width / 2,
             robtopButton->getScaledContentSize().height + verticalGap + facebookButton->getScaledContentSize().height / 2
         });
 
-        auto twitchButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("twitch-button"));
         twitchButton->setPosition({
             youtubeButton->getPositionX() + youtubeButton->getScaledContentSize().width / 2 + horizontalGap + twitchButton->getScaledContentSize().width / 2,
             robtopButton->getScaledContentSize().height + verticalGap + facebookButton->getScaledContentSize().height / 2
         });
 
-        auto discordButton = static_cast<CCMenuItemSpriteExtra*>(socialMenu->getChildByID("discord-button"));
         discordButton->setPosition({
             twitchButton->getPositionX(),
             discordButton->getScaledContentSize().height / 2
@@ -391,6 +408,10 @@ struct CustomMenuLayer : Modify<CustomMenuLayer, MenuLayer> {
         });
 
         auto bottomMenu = static_cast<CCMenu*>(this->getChildByID("bottom-menu"));
+        if (!bottomMenu) {
+            log::warn("MenuLayer: no 'bottom-menu' node, skipping layout fix");
+            return;
+        }
         float spacing = 5.0f;
         float buttonMenuLeftMargin = bottomMenu->getPositionX() - bottomMenu->getScaledContentSize().width * bottomMenu->getAnchorPoint().x;
         float overlap = (socialMenu->getPositionX() + socialMenu->getScaledContentSize().width) - buttonMenuLeftMargin + spacing;

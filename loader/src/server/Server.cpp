@@ -824,7 +824,7 @@ ServerFuture<ServerModVersion> server::getModVersion(std::string id, ModVersion 
             "/mods/{}/versions/{}?gd={}&platforms={}",
             id,
             versionURL,
-            Loader::get()->getGameVersion(),
+            GEODE_GD_VERSION_STR,
             GEODE_PLATFORM_SHORT_IDENTIFIER
     ));
 
@@ -1019,7 +1019,7 @@ ServerFuture<ServerLoaderVersion> server::getLatestLoaderVersion(bool useCache) 
     req.userAgent(getServerUserAgent());
     auto response = co_await req.get(
         formatServerURL("/loader/versions/latest?gd={}&platform={}",
-            Loader::get()->getGameVersion(),
+            GEODE_GD_VERSION_STR,
             GEODE_PLATFORM_SHORT_IDENTIFIER_NOARCH
         )
     );

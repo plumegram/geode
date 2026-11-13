@@ -127,7 +127,7 @@ jobs:
           # targets Geode 6 / 2.2091 with a new Geode/mapping/ include layout and
           # does not compile against the 5.11.2 loader
           build-contexts: |
-            bindings=https://github.com/geode-sdk/bindings.git#1605f500d0
+            bindings=https://github.com/geode-sdk/bindings.git#1605f500d053f8de122bf5c7dc6d17c24866e02e
           # сохраняем .git биндингов, чтобы лоадер вшил их commit hash
           build-args: |
             BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
